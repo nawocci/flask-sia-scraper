@@ -11,11 +11,12 @@ def extract_and_validate_request_data():
         data = request.get_json()
         nim = data.get('nim')
         password = data.get('password')
+        periode = data.get('periode')
         if not nim or not password:
             raise ValueError('NIM and password are required')
-        return nim, password, None
+        return nim, password, periode, None
     except (TypeError, ValueError) as e:
-        return None, None, str(e)
+        return None, None, None, str(e)
 
 def require_api_key(func):
     @wraps(func)
@@ -39,12 +40,12 @@ def get_student_data():
 @app.route('/getSchedule', methods=['POST'])
 @require_api_key
 def get_schedule():
-    nim, password, error = extract_and_validate_request_data()
+    nim, password, periode, error = extract_and_validate_request_data()
     if error:
         return jsonify({'error': error}), 400
 
-    schedule = scrape_schedule(nim, password)
-    return jsonify(schedule)
+    result = scrape_schedule(nim, password, periode)
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

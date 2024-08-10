@@ -20,7 +20,7 @@ STUDENT_DATA_SEARCH_STRINGS = [
     ('IPK', 'gpa')
 ]
 SCHEDULE_PAYLOAD = {
-    'periode': '20233'
+    'periode': ''
 }
 
 def login(nim, password):
@@ -52,10 +52,26 @@ def scrape_student_data(nim, password):
 
     return results
 
-def scrape_schedule(nim, password):
+def scrape_schedule(nim, password, periode):
     try:
         session = login(nim, password)
-        response = session.post(SCHEDULE_URL, data=SCHEDULE_PAYLOAD)
+
+        # Scrape available periode options
+        response = session.get(SCHEDULE_URL)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        periode_select = soup.find('select', {'name': 'periode'})
+        options = periode_select.find_all('option')
+        periode_options = [{"value": option['value'], "label": option.text.strip()} for option in options]
+
+        # Set default periode to the smallest one if not provided
+        if not periode:
+            periode = min(option['value'] for option in periode_options)
+
+        # Scrape schedule for the given periode
+        payload = SCHEDULE_PAYLOAD.copy()
+        payload['periode'] = periode
+        response = session.post(SCHEDULE_URL, data=payload)
         response.raise_for_status()
     except requests.RequestException as e:
         return {'error': str(e)}
@@ -63,7 +79,7 @@ def scrape_schedule(nim, password):
     soup = BeautifulSoup(response.text, 'html.parser')
     schedule_table = soup.find('table', {'class': 'table table-striped table-condensed'})
     if not schedule_table:
-        return []
+        return {'schedule': [], 'periode_options': periode_options}
 
     rows = schedule_table.find_all('tr')[1:]  # Skip the header row
     schedule_data = []
@@ -78,12 +94,12 @@ def scrape_schedule(nim, password):
                 'class_start': cells[2].text.strip(),
                 'class_end': cells[3].text.strip(),
                 'subject_code': cells[4].text.strip(),
-                'subject_name': cells[5].get_text(separator=' / ').replace(' / \n /', '').strip(), # TODO: Refactor this
-                'class_number': cells[6].text.strip().split('\n')[2] if len(cells[6].text.strip().split('\n')) > 2 else '', # TODO: Refactor this
+                'subject_name': cells[5].get_text(separator=' / ').replace(' / \n /', '').strip(),  # TODO: Refactor this
+                'class_number': cells[6].text.strip().split('\n')[2] if len(cells[6].text.strip().split('\n')) > 2 else '',  # TODO: Refactor this
                 'instructor': cells[7].text.strip(),
                 'class_unit': cells[8].text.strip(),
             }
             schedule_data.append(schedule)
             schedule_id += 1
 
-    return schedule_data
+    return {'schedule': schedule_data, 'periode_options': periode_options}
